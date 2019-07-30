@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1564431587166.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "92B491EC",
+    "lastKnownWriteTime" : 1564431587,
+    "last_content_update" : 1564431587,
+    "path" : "~/projects/RecordLinkUtil/vignettes/Introduction.Rmd",
+    "project_path" : "vignettes/Introduction.Rmd",
+    "properties" : {
+        "cursorPosition" : "3,11",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

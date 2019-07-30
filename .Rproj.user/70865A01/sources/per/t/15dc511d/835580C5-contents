@@ -1,0 +1,16 @@
+#' getConfusion
+#'
+#' @usage getConfusion(dfA, dfB, inds, idColA, idColB = NULL)
+#'
+#' @param dfA First data frame being linked
+#' @param dfB Second data frame being linked
+#' @param inds A nx2 index pair matrix indicating the detected matches
+#' @param idColA The column name of the shared id across dfA and dfB
+#' @param idB What to concatenate to a column name in dfB if there exists a identical column in dfB
+#'
+#'
+#' @return \code{bindMatches} returns a dataframe of the original dataframes bound by index.
+#'
+#' @author Sam Murray<slmurray@andrew.cmu.edu>
+#' @export
+#' @import tidyverse

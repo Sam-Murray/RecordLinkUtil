@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1564059810346.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3189305394",
+    "id" : "1A0ACEB",
+    "lastKnownWriteTime" : 1564068598,
+    "last_content_update" : 1564068598266,
+    "path" : "~/projects/RecordLinkUtil/R/generate_record_data.R",
+    "project_path" : "R/generate_record_data.R",
+    "properties" : {
+        "cursorPosition" : "54,21",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
