@@ -4,7 +4,7 @@
 \alias{generate_record_data}
 \title{generate_record_data}
 \usage{
-generate_record_data(s)
+generate_record_data(s, ...)
 }
 \arguments{
 \item{s}{The number of samples to generate}

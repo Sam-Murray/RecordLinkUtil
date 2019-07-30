@@ -15,5 +15,31 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
-library(RecordLinkUtil)
+library("RecordLinkUtil")
 ```
+
+
+
+## The Entity Matching Problem:
+Given two datasets without shared unique identifers, how can we determine which record represent the same "entity". 
+For example, say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say zipcode, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
+
+We can generate data that reflects this situation.
+
+```{r}
+#zip_by_pop: Generates random zipcodes with probability proportional to population of that zipcode
+zips_by_pop <-  supplyArgs(zipcodesME, distribution = "population")
+
+
+sample_zi
+dfA = generate_record_data(s = 500, data = sample_zips_by_pop)
+
+birthyear(10)
+```
+
+
+
+```{r}
+
+```
+

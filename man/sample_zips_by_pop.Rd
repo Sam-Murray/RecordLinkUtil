@@ -4,7 +4,7 @@
 \alias{sample_zips_by_pop}
 \title{sample_zips_by_pop}
 \usage{
-sample_zips_by_pop(s)
+sample_zips_by_pop(s, include_town = FALSE)
 }
 \arguments{
 \item{s}{The number of samples to produce}

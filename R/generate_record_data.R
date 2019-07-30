@@ -16,9 +16,8 @@
 #' @import purrr
 #' @import stringr
 #' @importFrom readr read_csv
-sample_zips_by_pop <- function(s){
-  zips
-  pop
+#' @export
+sample_zips_by_pop <- function(s, include_town = FALSE){
   pop$zip <- as.numeric(pop$zip)
   zips$City <- as.character(zips$City)
 
@@ -30,7 +29,23 @@ sample_zips_by_pop <- function(s){
 
   sample_zips = pop$zip[samples]
   sample_towns = map_chr(sample_zips, ~zips$City[which.max(zips$Zipcode == .x)])
-  result <- tibble(zipcode = sample_zips, town = sample_towns)
+  if(include_town){
+    result <- tibble(zipcode = sample_zips, town = sample_towns)
+  }else{
+    result <- sample_zips
+  }
+
+  return(result)
+}
+
+
+
+sample_names_uniform <- function(s) {
+  print("in names")
+  names <- names$name %>%
+    str_to_upper() %>%
+    sample(s, replace = TRUE)
+  names = map_chr(names, ~as.character(.x))
   return(result)
 }
 
@@ -49,19 +64,9 @@ sample_zips_by_pop <- function(s){
 #' @import purrr
 #' @importFrom readr read_csv
 #' @import stringr
-generate_record_data <- function(s){
-
-  zips <- sample_zips_by_pop(s)
-  names <- names$name %>%
-    str_to_upper() %>%
-    sample(s, replace = TRUE)
-  names = map_chr(names, ~as.character(.x))
-  print(names)
-  birthyear <-  1940:2010 %>%
-    sample(s, replace = TRUE)
-  sex <-  c("M","F") %>%
-    sample(s, replace = TRUE)
-  df = cbind(id = 1:s, zips,names,"birthyear" = birthyear, "sex" = sex)
-  df = mutate(df, names = as.character(names), town = as.character(town))
-  df
+generate_record_data <- function(s, ...){
+  arg_list <- list(...)
+  df = map(names(arg_list), ~arg_list[[.x]](s))
+  names(df) <- names(arg_list)
+  return(as.data.frame(df))
 }
