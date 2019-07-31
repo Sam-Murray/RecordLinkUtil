@@ -15,26 +15,41 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
-library("RecordLinkUtil")
+library(fastLink)
+library(RecordLinkUtil)
+  
+
+
 ```
 
 
 
 ## The Entity Matching Problem:
 Given two datasets without shared unique identifers, how can we determine which record represent the same "entity". 
-For example, say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say zipcode, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
+For example, say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say city, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
 
 We can generate data that reflects this situation.
 
 ```{r}
-#zip_by_pop: Generates random zipcodes with probability proportional to population of that zipcode
-zips_by_pop <-  supplyArgs(zipcodesME, distribution = "population")
+
+library(lubridate)
+
+#Start and end dates for death certificate data
+start_date = ymd("2015-1-1")
+start_date_num = as.numeric(start_date)
+end_date = ymd("2019-1-3")
+end_date_num = as.numeric(end_date)
 
 
-sample_zi
-dfA = generate_record_data(s = 500, data = sample_zips_by_pop)
+dth_crt = generate_record_data(s = 500,
+                           id = id_col,
+                           town = sample_towns_by_pop, 
+                           birthyear = supplyArgs(sample, x = 1960:2000, replace = TRUE, .OVERIDE = FALSE),
+                           sex = supplyArgs(sample, x = c("M", "F"), replace = TRUE, .OVERIDE = FALSE),
+                           deathdate = wrapFunc(supplyArgs(sample, x = start_date_num:end_date_num, replace = TRUE, .OVERIDE = FALSE),as_date))
 
-birthyear(10)
+
+
 ```
 
 

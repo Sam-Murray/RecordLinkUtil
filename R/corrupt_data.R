@@ -38,19 +38,8 @@
 #' @author Sam Murray<slmurray@andrew.cmu.edu>
 #'
 #' @import tidyverse
-corrupt.factory <- function(corr.func, type_check = function(x){TRUE}, error_message = NULL){
+corrupt_factory <- function(corr.func, type_check = function(x){TRUE}, error_message = NULL){
   result <- function(val, error_rate = .2, ...){
-
-
-    if(!type_check(val, ...)){
-      if(is.null(error_message)){
-        error_message <- "Incorrect type for corruption function"
-
-      }
-      stop(error_message)
-    }
-
-
     if(rnorm(1)>qnorm(error_rate)){
       return(val)
     }else{
@@ -75,7 +64,7 @@ corrupt.factory <- function(corr.func, type_check = function(x){TRUE}, error_mes
 #'
 #' @import dplyr
 #' @import purrr
-corr.numeric <- function(val, scale = 1){
+corr_numeric <- function(val, scale = 1){
   error = rnorm(1)*scale
   error = ifelse(error < 0, floor(error), ceiling(error))
   return(val + error)
@@ -96,7 +85,7 @@ corr.numeric <- function(val, scale = 1){
 #' @import dplyr
 #' @import purrr
 
-corr.string <- function(val, scale = 2){
+corr_string <- function(val, scale = 2){
 
 
   error = rnorm(1)*scale
@@ -139,7 +128,7 @@ corr.string <- function(val, scale = 2){
 #' @import tidyverse
 #' @import dplyr
 #' @import purrr
-corr.replace <- function(val, pool = NULL){
+corr_replace <- function(val, pool = NULL){
 
 
   if(is.null(pool)){
@@ -168,7 +157,7 @@ corr.replace <- function(val, pool = NULL){
 #' @import dplyr
 #' @import purrr
 
-corrupt.numeric <- corrupt.factory(corr.numeric,is.numeric, "corrupt.numeric tried to corrupt non-numeric value using corrupt.numeric")
+corrupt_numeric <- corrupt_factory(corr.numeric) %>% checkArgs(val = is.numeric)
 
 #' corrupt.string
 #'
@@ -187,7 +176,7 @@ corrupt.numeric <- corrupt.factory(corr.numeric,is.numeric, "corrupt.numeric tri
 #' @import tidyverse
 #' @import dplyr
 #' @import purrr
-corrupt.character <- corrupt.factory(corr.string,is.character, "corrupt.character tried to corrupt non-character value using corrupt.character")
+corrupt_character <- corrupt_factory(corr.string) %>% checkArgs(val = is.character)
 
 #' corr.replace
 #'
@@ -206,13 +195,13 @@ corrupt.character <- corrupt.factory(corr.string,is.character, "corrupt.characte
 #'
 #' @import dplyr
 #' @import purrr
-corrupt.replace <-  corrupt.factory(corr.replace, function(val, pool = NULL)return(length(pool != 0)), "corrupt.replace tried to replace value from empty pool.")
+corrupt_replace <-  corrupt_factory(corr.replace) %>%  checkArgs(val = function(x){length(x == 0)})
 
 
 
 #' corrupt_data
 #'
-#'Takes data frame, returns data frame where each column is subjected to a numeric, string, or replacement corruption.
+#'Takes data frame, returns data frame where each column is subjected to the passed in corruption functions.
 #' @param df Data frame to be corrupted
 #' @param numeric_cor Names of columns to be corrupted numerically
 #' @param string_cor Names of columns to be corrupted with string corruption.
@@ -232,13 +221,18 @@ corrupt.replace <-  corrupt.factory(corr.replace, function(val, pool = NULL)retu
 #' corrupt_rec <- corrupt_data(rec, numeric_cor = c("zipcode","birthyear"),string_cor = c("names"),replace_cor = c("town"),er = error, v = TRUE)
 #'
 #'
-corrupt_data <- function(df, names, numeric_cor = NULL, string_cor = NULL, replace_cor = NULL, er = .1, v = FALSE){
+corrupt_data <- function(df, ... , .v = FALSE, col_names = NULL,col_contams = NULL){
 
-  if(length(er) == 1){
-    er <- rep(er, 3)
-  }else if(!(length(er) == 3)){
-    stop("Length of er must either be 1 or 3")
+  if(!(is.null(col_names)|is.null(col_contams))){
+
+    unpack_contams <- map2(col_names,col_contams,~rep(.y, times = length(.x)))
+    unpack_names <-
   }
+
+  col_contam <- list(...)
+
+
+  contams <- reduce(names(col_contam),)
 
 
   contams = mutate_at(df,numeric_cor, ~sapply(.x,corrupt.numeric,error_rate = er[1]))
@@ -249,7 +243,10 @@ corrupt_data <- function(df, names, numeric_cor = NULL, string_cor = NULL, repla
   corr_count = map2(df, contams, ~sum(.x != .y))%>%
     unlist() %>%
     sum()
-  print(paste0("Total # of mutations: ",corr_count))
+  if(.v){
+    print(paste0("Total # of mutations: ",corr_count))
+  }
+
   contams
 }
 

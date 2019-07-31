@@ -38,6 +38,22 @@ sample_zips_by_pop <- function(s, include_town = FALSE){
   return(result)
 }
 
+sample_towns_by_pop <- function(s){
+  pop$zip <- as.numeric(pop$zip)
+  zips$City <- as.character(zips$City)
+
+  pop <- pop[pop$zip %in% zips$Zipcode,]
+  total = sum(pop$population)
+  pop = cbind(pop, c_pop = cumsum(pop$population))
+  samples = runif(s, min = 0,max = total) %>%
+    map_int(~which.max(pop$c_pop >= .x))
+
+  sample_zips = pop$zip[samples]
+  sample_towns = map_chr(sample_zips, ~zips$City[which.max(zips$Zipcode == .x)])
+
+
+  return(sample_towns)
+}
 
 
 sample_names_uniform <- function(s) {
@@ -47,6 +63,10 @@ sample_names_uniform <- function(s) {
     sample(s, replace = TRUE)
   names = map_chr(names, ~as.character(.x))
   return(result)
+}
+
+id_col <- function(s){
+  return(1:s)
 }
 
 #' generate_record_data
@@ -66,7 +86,7 @@ sample_names_uniform <- function(s) {
 #' @import stringr
 generate_record_data <- function(s, ...){
   arg_list <- list(...)
-  df = map(names(arg_list), ~arg_list[[.x]](s))
+  df = map(names(arg_list), ~do.call(arg_list[[.x]],list(s)))
   names(df) <- names(arg_list)
   return(as.data.frame(df))
 }
