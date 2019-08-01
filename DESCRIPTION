@@ -10,6 +10,12 @@ Imports: tidyverse
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.1
+Collate:
+    'supplyArgs.R'
+    'corrupt_data.R'
+    'bindMatches.R'
+    'getConfusion.R'
+    'generate_record_data.R'
 Suggests: 
     knitr,
     rmarkdown

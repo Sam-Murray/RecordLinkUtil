@@ -1,6 +1,6 @@
 
 
-#' corrupt.factory
+#' corrupt_factory
 #'
 #'Given a function that performs a "corruption" on data, corrupt.factory will generate a function
 #'that takes some data x, and with probability error_rate performs the given corruption on it.
@@ -38,20 +38,26 @@
 #' @author Sam Murray<slmurray@andrew.cmu.edu>
 #'
 #' @import tidyverse
-corrupt_factory <- function(corr.func, type_check = function(x){TRUE}, error_message = NULL){
-  result <- function(val, error_rate = .2, ...){
-    if(rnorm(1)>qnorm(error_rate)){
-      return(val)
-    }else{
-      return(corr.func(val, ...))
+#' @import purrr
+corrupt_factory <- function(corr.func){
+
+
+  result <- function(vals, error_rate = .2, ...){
+    corrupt <- function(val, error_rate){
+      if(rnorm(1)>qnorm(error_rate)){
+        return(val)
+      }else{
+        return(corr.func(val, ...))
+      }
     }
+    return(modify(vals, corrupt, error_rate))
   }
   result
 
 }
 
 
-#' corr.numeric
+#' corr_numeric
 #'
 #'A general numeric corruption function. Adds a value from the normal distribution (scaled by scale) to the value.
 #'
@@ -65,11 +71,12 @@ corrupt_factory <- function(corr.func, type_check = function(x){TRUE}, error_mes
 #' @import dplyr
 #' @import purrr
 corr_numeric <- function(val, scale = 1){
+
   error = rnorm(1)*scale
-  error = ifelse(error < 0, floor(error), ceiling(error))
+  error = as.integer(ifelse(error < 0, floor(error), ceiling(error)))
   return(val + error)
 }
-#' corr.string
+#' corr_string
 #'
 #'A general string corruption function. Either adds, deletes, or substitutes single characters in the string.
 #'The number of insertions, deletions, and replacements is generated from the normal, scaled by scale.
@@ -111,11 +118,12 @@ corr_string <- function(val, scale = 2){
 
     }
   }
+
   result
 
 }
 
-#' corr.replace
+#' corr_replace
 #'
 #'A general replacement corruption function. Takes a value and a pool of values, and returns a random element from the pool.
 #' @param val The value to be corrupted. Should be string
@@ -140,7 +148,7 @@ corr_replace <- function(val, pool = NULL){
 
 }
 
-#' corrupt.numeric
+#' corrupt_numeric
 #'
 #'A general numeric corruption function. Adds a value from the normal distribution (scaled by scale) to the value.
 #'A built in corruption function, ready to be passed to corrupt data. Does not need to be passed to corrupt.factory.
@@ -156,10 +164,11 @@ corr_replace <- function(val, pool = NULL){
 #' @import tidyverse
 #' @import dplyr
 #' @import purrr
+#' @export
 
-corrupt_numeric <- corrupt_factory(corr.numeric) %>% checkArgs(val = is.numeric)
+corrupt_numeric <- corrupt_factory(corr_numeric) %>% checkArgs(vals = is.numeric)
 
-#' corrupt.string
+#' corrupt_character
 #'
 #'A general string corruption function. Either adds, deletes, or substitutes single characters in the string.
 #'The number of insertions, deletions, and replacements is generated from the normal, scaled by scale.
@@ -176,9 +185,10 @@ corrupt_numeric <- corrupt_factory(corr.numeric) %>% checkArgs(val = is.numeric)
 #' @import tidyverse
 #' @import dplyr
 #' @import purrr
-corrupt_character <- corrupt_factory(corr.string) %>% checkArgs(val = is.character)
+#' @export
+corrupt_character <- corrupt_factory(corr_string) %>% checkArgs(vals = is.character)
 
-#' corr.replace
+#' corrupt_replace
 #'
 #'A general replacement corruption function. Takes a value and a pool of values, and returns a random element from the pool.
 #'A built in corruption function, ready to be passed to corrupt data. Does not need to be passed to corrupt.factory.
@@ -195,8 +205,8 @@ corrupt_character <- corrupt_factory(corr.string) %>% checkArgs(val = is.charact
 #'
 #' @import dplyr
 #' @import purrr
-corrupt_replace <-  corrupt_factory(corr.replace) %>%  checkArgs(val = function(x){length(x == 0)})
-
+#' @export
+corrupt_replace <-  corrupt_factory(corr_replace) %>%  checkArgs(vals = function(x){length(x == 0)})
 
 
 #' corrupt_data
@@ -221,29 +231,31 @@ corrupt_replace <-  corrupt_factory(corr.replace) %>%  checkArgs(val = function(
 #' corrupt_rec <- corrupt_data(rec, numeric_cor = c("zipcode","birthyear"),string_cor = c("names"),replace_cor = c("town"),er = error, v = TRUE)
 #'
 #'
+#' @export
 corrupt_data <- function(df, ... , .v = FALSE, col_names = NULL,col_contams = NULL){
+  col_contam <- list(...)
 
   if(!(is.null(col_names)|is.null(col_contams))){
 
     unpack_contams <- map2(col_names,col_contams,~rep(.y, times = length(.x)))
-    unpack_names <-
+    unpack_names <- unlist(col_names)
+    names(unpack_contams) <- unpack_names
+
+    col_contam <-  c(col_contam, unpack_contams)
   }
 
-  col_contam <- list(...)
+  col_names <- names(col_contam)
 
 
-  contams <- reduce(names(col_contam),)
 
 
-  contams = mutate_at(df,numeric_cor, ~sapply(.x,corrupt.numeric,error_rate = er[1]))
-  contams = mutate_at(contams,string_cor, ~sapply(.x,corrupt.character,error_rate = er[2]))
-  contams = mutate_at(contams,replace_cor, ~sapply(.x,corrupt.replace,error_rate = er[3],pool = .x))
 
+  contams <- reduce2(col_names, col_contam, modify_at, .init = df)
 
-  corr_count = map2(df, contams, ~sum(.x != .y))%>%
+  if(.v){
+    corr_count = map2(df, contams, ~sum(.x != .y))%>%
     unlist() %>%
     sum()
-  if(.v){
     print(paste0("Total # of mutations: ",corr_count))
   }
 

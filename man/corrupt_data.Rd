@@ -4,8 +4,8 @@
 \alias{corrupt_data}
 \title{corrupt_data}
 \usage{
-corrupt_data(df, names, numeric_cor = NULL, string_cor = NULL,
-  replace_cor = NULL, er = 0.1, v = FALSE)
+corrupt_data(df, ..., .v = FALSE, col_names = NULL,
+  col_contams = NULL)
 }
 \arguments{
 \item{df}{Data frame to be corrupted}
@@ -24,7 +24,7 @@ corrupt_data(df, names, numeric_cor = NULL, string_cor = NULL,
 Corrupted data frame
 }
 \description{
-Takes data frame, returns data frame where each column is subjected to a numeric, string, or replacement corruption.
+Takes data frame, returns data frame where each column is subjected to the passed in corruption functions.
 }
 \examples{
 data_size = 500

@@ -37,7 +37,22 @@ sample_zips_by_pop <- function(s, include_town = FALSE){
 
   return(result)
 }
-
+#' sample_towns_by_pop
+#'
+#'A function for generating records from the built in data included in this package.
+#'This function generates \code{s} towns, such that the towns are chosen with frequency that
+#'represents the total population of that town.
+#'
+#' @param s The number of samples to produce
+#'
+#' @return Character vector containing s towns
+#' @author Sam Murray<slmurray@andrew.cmu.edu>
+#' @import tidyverse
+#' @import dplyr
+#' @import purrr
+#' @import stringr
+#' @importFrom readr read_csv
+#' @export
 sample_towns_by_pop <- function(s){
   pop$zip <- as.numeric(pop$zip)
   zips$City <- as.character(zips$City)
@@ -55,7 +70,21 @@ sample_towns_by_pop <- function(s){
   return(sample_towns)
 }
 
-
+#' sample_names_uniform
+#'
+#'A function for generating records from the built in data included in this package.
+#'This function generates \code{s}
+#'
+#' @param s The number of samples to produce
+#'
+#' @return (s)x2 dataframe containing zipcode and town samples.
+#' @author Sam Murray<slmurray@andrew.cmu.edu>
+#' @import tidyverse
+#' @import dplyr
+#' @import purrr
+#' @import stringr
+#' @importFrom readr read_csv
+#' @export
 sample_names_uniform <- function(s) {
   print("in names")
   names <- names$name %>%
@@ -65,28 +94,3 @@ sample_names_uniform <- function(s) {
   return(result)
 }
 
-id_col <- function(s){
-  return(1:s)
-}
-
-#' generate_record_data
-#'
-#'A function that generates random data to use for testing record linkage packages.
-#'The generated data contains name, birthyear, zipcode, town, sex, and id.
-#'
-#' @param s The number of samples to generate
-#'
-#' @return A (s)x6 dataframe containing record information
-#' @export
-#'
-#' @import tidyverse
-#' @import dplyr
-#' @import purrr
-#' @importFrom readr read_csv
-#' @import stringr
-generate_record_data <- function(s, ...){
-  arg_list <- list(...)
-  df = map(names(arg_list), ~do.call(arg_list[[.x]],list(s)))
-  names(df) <- names(arg_list)
-  return(as.data.frame(df))
-}

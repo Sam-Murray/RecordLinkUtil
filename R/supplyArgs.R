@@ -53,8 +53,10 @@ typeCheck <- function(val, check){
 #' @author Sam Murray <slmurray@andrew.cmu.edu>
 #'
 #'
-#' @export
+#'
 #' @import tidyverse
+#' @importFrom rlang caller_env
+#' @export
 checkArgs <-  function(func, ...){
   func_name <-   paste0(deparse(substitute(func)), collapse = "")
   if(nchar(func_name) >= 50){
@@ -91,11 +93,17 @@ checkArgs <-  function(func, ...){
   }
 
   output <-  function(){
+    par_env <- caller_env()
     my_args <- as.list(match.call())
-
     my_args <- my_args[2:length(my_args)]
+
+    evaled_args <- map(my_args, eval, envir = par_env)
+    names(evaled_args) <-  names(my_args)
+
+    my_args <- evaled_args
+
     for(var_name in unique(names(checkList))){
-      # print(paste0("checking var of name ", var_name))
+       # print(paste0("checking var of name ", var_name))
       var_checks <- checkList[names(checkList) == var_name]
       val <- my_args[[var_name]]
       # print(paste0("Val of that var is ", val))
@@ -144,9 +152,9 @@ checkArgs <-  function(func, ...){
 #'
 #' @author Sam Murray <slmurray@andrew.cmu.edu>
 #'
-#'
-#' @export
+#' @importFrom rlang caller_env
 #' @import tidyverse
+#' @export
 supplyArgs <-  function(func, ..., .OVERIDE = TRUE){
   func_name <-   paste0(deparse(substitute(func)), collapse = "")
   if(nchar(func_name) >= 50){
@@ -169,14 +177,18 @@ supplyArgs <-  function(func, ..., .OVERIDE = TRUE){
   argList = names(formals(func))
   #Checks that the variables being checked are in the list of args for func
 
-  if(!all(names(valList) %in% argList)){
-    stop("All name value pairs passed to supplyArgs must corrispond to a argument of func")
-  }
 
   output <-  function(){
+    par_env <- caller_env()
     my_args <- as.list(match.call())
-
     my_args <- my_args[2:length(my_args)]
+
+    evaled_args <- map(my_args, eval, envir = par_env)
+    names(evaled_args) <-  names(my_args)
+
+    my_args <- evaled_args
+
+
     if(.OVERIDE){
       my_args <- c(my_args, valList[!(names(valList) %in% names(my_args))])
     }else{
@@ -223,20 +235,26 @@ supplyArgs <-  function(func, ..., .OVERIDE = TRUE){
 #'
 #' @author Sam Murray <slmurray@andrew.cmu.edu>
 #'
+#' @importFrom rlang caller_env
+#' @import tidyverse
 #'
 #' @export
-#' @import tidyverse
 wrapFunc <- function(func, wrap_func){
-  output <-  function(){
+  output <-  function(...){
+    par_env <- caller_env()
     my_args <- as.list(match.call())
-
     my_args <- my_args[2:length(my_args)]
+
+    evaled_args <- map(my_args, eval, envir = par_env)
+    names(evaled_args) <-  names(my_args)
+
+    my_args <- evaled_args
 
     return(wrap_func(do.call(func,my_args)))
   }
-
-  formals(output) <-  formals(func)
-
+  if(!is.primitive(func)){
+    formals(output) <-  formals(func)
+  }
 
   return(output)
 }

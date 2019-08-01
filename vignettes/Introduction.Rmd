@@ -1,5 +1,5 @@
 ---
-title: "Introduction"
+title: "Entity Matching with fastLink"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Introduction}
@@ -14,25 +14,29 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup}
+```{r setup, message = FALSE}
 library(fastLink)
+library(lubridate)
 library(RecordLinkUtil)
-  
-
+library(knitr)
+library(dplyr)
+library(stringdist)
 
 ```
 
 
 
 ## The Entity Matching Problem:
-Given two datasets without shared unique identifers, how can we determine which record represent the same "entity". 
-For example, say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say city, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
+Given two datasets without shared unique identifers, how can we determine which records represent the same real world "entity"?
 
-We can generate data that reflects this situation.
+
+###Example:
+Say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say city, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
+
+We can generate death certificate data that reflects this situation.
 
 ```{r}
 
-library(lubridate)
 
 #Start and end dates for death certificate data
 start_date = ymd("2015-1-1")
@@ -40,21 +44,127 @@ start_date_num = as.numeric(start_date)
 end_date = ymd("2019-1-3")
 end_date_num = as.numeric(end_date)
 
+data_size = 1000
+data <- tibble(id = 1:data_size,
+                   town = sample_towns_by_pop(data_size), 
+                   birthyear = sample(data_size, x = 1960:2000, replace = TRUE),
+                   sex = sample(data_size, x = c("M", "F"), replace = TRUE),
+                   deathdate = as_date(sample(data_size, x = start_date_num:end_date_num, replace = TRUE)))
 
-dth_crt = generate_record_data(s = 500,
-                           id = id_col,
-                           town = sample_towns_by_pop, 
-                           birthyear = supplyArgs(sample, x = 1960:2000, replace = TRUE, .OVERIDE = FALSE),
-                           sex = supplyArgs(sample, x = c("M", "F"), replace = TRUE, .OVERIDE = FALSE),
-                           deathdate = wrapFunc(supplyArgs(sample, x = start_date_num:end_date_num, replace = TRUE, .OVERIDE = FALSE),as_date))
+dth_crt = data[1:500,]
+
+kable(dth_crt[1:10,])
 
 
+claims <-  mutate(dth_crt,
+                          birthyear = corrupt_numeric(birthyear, error_rate = .3, scale = 1),
+                          town = corrupt_replace(town, pool = dth_crt$town),
+                          town = corrupt_character(town),
+                          deathdate = as_date(corrupt_numeric(as.numeric(deathdate), error_rate = .9,  scale = 10)))
+                    
+kable(claims[1:10,])
+look = cbind(data, claims)
 
 ```
 
-
-
+How can we extrapolate from these shared feilds to predict which records match? The naive approach would to just match on these feilds, but in this case this method yeilds very few matches:
 ```{r}
+perfect_matches = inner_join(dth_crt, claims, by = c("town", "birthyear", "sex", "deathdate"))
+print(paste0("Only ", nrow(perfect_matches), " perfect matches out of ", nrow(dth_crt)))
+```
+Theres got to be a better way!
+
+##Fellegi-Sunter Model of Record Linkage:
+We can formalise this problem using the model developed by Ivan Fellegi and Alan Sunter in their 1969 paper "A Theory for Record Linkage". Their method can be broken down into four general steps:
+
+1. Calculating the __comparison vector__ for each pair of records
+2. Finding the probability of any given comparison vector given a match/nonmatch.
+3. Assigning the weights to each comparison vector
+4. Using the assigned weights to decide if a pair is a match.
+
+##1. Calculating Comparison vectors:
+
+A comparison vector is a way of representing the differences between two records in terms of the differences between their shared feilds. This translates in practice to a vector of numeric "distances" between each shared feature, where the distance between features is defined by a metric appropriate to that feature.
+
+For an example, lets go back to the generated data. Here the shared feilds are town, sex, year of birth, and date of death. For yob and dod, we can use the number of years/days of diffrence between the two records as a metric. For sex, we can say that the difference is either 0 if the records agree or 1 if they disagree. For town, the choice of metric is less obvious. If we suspect that there are spelling errors in the towns feild(which there is), we can use string distance, a real number between 1 and 0 which measure how typographically similar the two strings are (ex: the distance between "string" and "rings" is `r stringdist("strings", "ring", method = "jw")`. However, another approriate metric might be how close the two towns are geographically.
+
+We'll run some examples from the generated data:
+```{r, include = FALSE}
+
+get_comp_vec <- function(a, b){
+  out <- list()
+  town_dist <- stringdist(a$town, b$town, method = "jw")
+  yob_dist <- abs(a$birthyear - b$birthyear)
+  sex_dist<- as.numeric(!(a$sex == b$sex))
+  deathdate_dist <- abs(as.numeric(a$deathdate)- as.numeric(b$deathdate))
+  return(tibble("town_dist" = town_dist, "yob_dist" =yob_dist, "sex_dist" =sex_dist, "deathdate_dist" = deathdate_dist))
+}
 
 ```
+
+```{r,echo = FALSE}
+record_1 <- dth_crt[1,]
+print("The first record in the dth_crt data is :")
+kable(record_1)
+print("The first record in the claims data is :")
+record_2 <- claims[1,]
+kable(record_2)
+print("The second record in the claims data is :")
+record_3 <- claims[2,]
+kable(record_3)
+
+print("The comparison vector between the first records of the claims and crt data is:")
+kable(get_comp_vec(record_1,record_2))
+
+print("The comparison vector between the first record of the claims and the second record of crt data is:")
+kable(get_comp_vec(record_1,record_3))
+```
+
+This is a natural way of creating comparison vectors, but it has several subtle probabilistic issues.
+If we eventually want find the probability of a comparison vector occuring between a match/nonmatch (step 2 of fellegi-sunter), how can we allow a continous variable like string distance from a potentially continous probability space without making the probability of any one given comparison vector zero?
+
+The way fastLink and most other open source packages navigate this is by assigning discrete cutoffs for each metric that paritions the range of possible distances given by that metric into three similarity levels: very similar, similar, and completly different. These three scores are encoded as integers 2, 1, and 0 respectivly.
+
+In our example, we can assign cutoffs 2, 10 for numeric metrics, .02, .15 for string distances, and for exact matching on gender, we'll just assign a score very similar if they match, and completly different if they dont. This means if we have a numeric distance between 0 and 2, we call it very similar, between 2 and 10 similar, and over 10 completly different.
+
+Given these cutoffs, our previous comparison vectors become:
+```{r, echo = FALSE}
+cv1 <-  get_comp_vec(record_1,record_2)
+cv2 <- get_comp_vec(record_1,record_3)
+
+cvs <- rbind(cv1, cv2)
+
+cvs <-  mutate(cvs,
+               town_dist = ifelse(town_dist <= .02, 2, ifelse(town_dist <= .2 , 1, 0)),
+               yob_dist = ifelse(yob_dist <= 2, 2, ifelse(yob_dist <= 10 , 1, 0)),
+               deathdate_dist = ifelse(deathdate_dist <= 2, 2, ifelse(deathdate_dist <= 10,1, 0)),
+               sex_dist = ifelse(sex_dist == 0, 2, 0))
+               
+
+print("The comparison vector between the first records of the claims and crt data is:")
+kable(cvs[1,])
+
+print("The comparison vector between the first record of the claims and the second record of crt data is:")
+kable(cvs[2,])
+```
+
+These comparison vectors are identical what fastLink uses under the hood. In the fastLink documentation and in this vignette, we will refer to the comparison vector of records $i$ and $j$ of the first and second data base as $\gamma_{i,j}$.
+
+##2. Finding probabilities:
+Once we have the comparison vector for every pair, we can start estimating several probabilities:
+
+1. $P(M_{i,j})$: The probability of any two records $i$, $j$ being a true match(ie represent the same real world entity).  
+
+2. $P(\gamma_{i,j} |M_{i,j})$: The probability that comparison vector $\gamma_{i,j}$ occuring given records $i$ and $j$ are a true match.
+
+3. $P(\gamma_{i,j} |\neg M_{i,j})$:The probability that comparison vector $\gamma_{i,j}$ occuring given records $i$ and $j$ are not a true match.
+
+We want to estimate $P(M_{i,j})$,  $P(\gamma_{i,j} |M_{i,j})$, and $P(\gamma_{i,j} |\neg M_{i,j})$, because using bayes rule we can then calculate the probability of $i$, $j$ being a match given the observed comparison vector $\gamma_{i,j}$.
+
+$$
+P( M_{i,j}|\gamma_{i,j}) = \frac{P( \gamma_{i,j}|M_{i,j})P(M_{i,j})}{P( \gamma_{i,j}|M_{i,j})P(M_{i,j}) + P( \gamma_{i,j}|\neg M_{i,j})P(\neg M_{i,j})}
+$$
+Estimating these probabilities where most record linkage methods truly diverge. Fastlink uses a type of unsupervised learning called the expectation-maximization algorithm. 
+
+
 
