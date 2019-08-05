@@ -79,8 +79,7 @@ We can formalise this problem using the model developed by Ivan Fellegi and Alan
 
 1. Calculating the __comparison vector__ for each pair of records
 2. Finding the probability of any given comparison vector given a match/nonmatch.
-3. Assigning the weights to each comparison vector
-4. Using the assigned weights to decide if a pair is a match.
+3. Assigning the weights to each comparison vector & finding matches
 
 ##1. Calculating Comparison vectors:
 
@@ -164,7 +163,103 @@ We want to estimate $P(M_{i,j})$,  $P(\gamma_{i,j} |M_{i,j})$, and $P(\gamma_{i,
 $$
 P( M_{i,j}|\gamma_{i,j}) = \frac{P( \gamma_{i,j}|M_{i,j})P(M_{i,j})}{P( \gamma_{i,j}|M_{i,j})P(M_{i,j}) + P( \gamma_{i,j}|\neg M_{i,j})P(\neg M_{i,j})}
 $$
-Estimating these probabilities where most record linkage methods truly diverge. Fastlink uses a type of unsupervised learning called the expectation-maximization algorithm. 
+To estimate these probabilities, fastLink uses an unsupervised learning technique called the expectation-maximization algorithm. 
+
+###EM Algorithm
+
+The EM algorithm assumes that there is latent and observed data drawn from some distribution $f(x|\theta)$, which is a function of some unknown parameters $\theta$. We want to find the values of the parameter $theta$ which maximizes the probability of the observed data occuring. The probability of fixed observed data $x$ as a function of the unknown parameters $\theta$ is usually called the "likelihood function", and this process of finding the parameters that maximize this is called likelihood maximization. 
+
+The EM algorithm works by first making a (educated) guess for values for the parameters, then iterativly improving this guess by finding the probabilities of the observed data for all possible values of the latent data given the current values of the parameters, then updating the parameters to better suit the calculated probabilities.
+
+In this application, the observed data are the comparison vectors for every pair of records, the latent data is whether every pair is a match or not, and two sets of parameters 
+
+1.$\pi_{kml}$: The probabilities that for any given feild k in the comparison vector, the probability of that feild taking on the lth similarity level, given a match or a nonmatch. In our ongoing example, the parameter $\pi_{2,1,2}$ would represent the probability that the year of birth(k = 2) between two matched records(m = 1) is within 1 year of each other(l = 2).
+
+2.$\lambda$ The probability that any two pairs are a match (ie just $P(M_{i,j})$)
+
+Assuming that the parameters are conditionally independent given a match/nonmatch, we can the calculate $P(\gamma_{i,j} |M_{i,j})$ for comparison vector $\gamma_{i,j} = \langle a_1, a_2, ..., a_k \rangle$ as a product of parameters $P(\gamma_{i,j} |M_{i,j}) = \pi_{1,1,a_1}*\pi_{2,1,a_2}* \dots \pi_{k,1,a_k}$
+
+In our example, we would calculate the probability of this comparison vector given a match $P(\gamma_{1,1} |M_{1,1})$
+```{r, echo = FALSE}
+print("The comparison vector between the first records of the claims and crt data is:")
+kable(cvs[1,])
+vec <- cvs[1,]
+pi_vec <- vector(mode = "character", length = length(vec))
+
+for(i in 1:length(vec)){
+  pi_vec[i] = paste0("pi_",i,"1",vec[i])
+}
+print(paste("P(gamma_{1,1} |M_{1,1})", pi_vec, collapse = " * "))
+```
+Using these parameters, we can calulate the probability $i,j$ are a match given the observed comparison vector:
+$$
+P( M_{i,j}|\gamma_{i,j}) = \frac{(\pi_{1,1,a_1}*\pi_{2,1,a_2}* \dots *\pi_{k,1,a_k})\lambda}{(\pi_{1,1,a_1}*\pi_{2,1,a_2}* \dots *\pi_{k,1,a_k})\lambda + (\pi_{1,0,a_1}*\pi_{2,0,a_2}* \dots *\pi_{k,0,a_k})(1-\lambda)}
+$$
+We can then update $\lambda$ to be the expected value of the number of matches  over the total number of pairs, given the number of records in dataframes A and B is $N_a$ and $N_b$ respectivly, and the number of true matches is $N_m$:
+
+$$
+\lambda = \frac{E[N_m]}{N_a*N_b} = \frac{\sum_{i = 1}^{N_a}\sum_{j = 1}^{N_b}P( M_{i,j}|\gamma_{i,j})}{N_a*N_b}
+$$
+We can also update each $\pi_{kml}$ to be the expected number of matches/nonmatches in pairs of records with agreement level $l$ in the kth feild, over the expected number of matches/nonmatches, where $S_l$ is the set of all pairs $(i,j)$ s.t the $k$th feild of the comparison vector $\gamma_{i,j}$ is $l$, and $N_{lm}$,$N_{lu}$ is the number of matches/non-matches in $S_l$.
+This means that given a match(m = 1), $\pi_{k1l}$ is updated as:
+$$
+\pi_{k1l} = \frac{E[N_{lm}]}{E[N_m]} = \frac{\sum_{(i,j)\in S_l}P( M_{i,j}|\gamma_{i,j})}{\sum_{i = 1}^{N_a}\sum_{j = 1}^{N_b}P( M_{i,j}|\gamma_{i,j})}
+$$
+And given a nonmatch(m = 0), $\pi_{k0l}$ is updated as:
+$$
+\pi_{k0l} = \frac{E[N_{lu}]}{E[N_u]} = \frac{\sum_{(i,j)\in S_l}(1-P( M_{i,j}|\gamma_{i,j}))}{\sum_{i = 1}^{N_a}\sum_{j = 1}^{N_b}(1-P( M_{i,j}|\gamma_{i,j}))}
+$$
+These values can be thought of as how associated a given similarity level in the kth feild is with a match/nonmatch. 
+
+This back and forth between calculating the probabilities $P( M_{i,j}|\gamma_{i,j})$ given the paramaters (the expectation step) and updating the the parameters based on the probabilities ($P( M_{i,j}|\gamma_{i,j})$) will eventually converge to a local maximum, as the parameter space is bounded(each probability is between 0 and 1) and each iteration provides updated parameters with a greater likelihood than the old parameters.
+
+The only issue is that the algorithm may converge to a local maximum that is nowhere near the true maximum, which we combat by making our starting guess such that for every feild $k$, and similarity levels $i$ and $l$ s.t. $i < l$, then $\pi_{k1i} << \pi_{k1l}$ and $\pi_{k0l} << \pi_{k0i}$. IE, feilds with higher similarity levels are more likely to occur given a match than a nonmatch, and vice versa.
+
+###Visualizing The EM Algorithm
+
+We can get a better inutitive understanding of this algorithm using the folowing animation. Each animation plots elements of the EM algorithm as performed on data generated in the same way as our example, with numeric matching on birthyear and deathdate, string matching on townname, exact matching on sex, and patial matching on townname and deathdate.
+
+
+
+![Figure 1: The Probabilities of Comparison Vectors over Iterations](./zetaIteration.gif)
+
+Figure 1 is the probability that a comparison vector represents a match given the comparison vector $P( M_{i,j}|\gamma_{i,j})$ on the y axis, and a index representing every unique observed comparison vector $\gamma_{i,j}$ along the x axis. The probabilities start unstable, but eventually converge.
+
+##3. Assigning Weights & Finding Matches
+
+Now, once the EM algorithm converges, we have our estimates for $P( M_{i,j}|\gamma_{i,j})$. However, fastLink does not match on $P( M_{i,j}|\gamma_{i,j})$ alone, but instead on the fellegi-sunter weight of $(i,j)$, which are defined:
+$$
+
+w_{i,j} = \log(\frac{P(\gamma_{i,j} |M_{i,j})}{P(\gamma_{i,j} |\neg M_{i,j})})
+
+$$
+In the actual code, these weights are translated by $-\log(\frac{\sum_{(v\in V)} P(\gamma_{v} |M_{v})}{\sum_{(v\in V)} P(\gamma_{v} |M_{v}))$, but the translation dosen't effect the  linkage rule. The way matches are determined is by selecting a probability threshold for $P(M_{i,j}|\gamma_{i,j})$, then any pair $(i,j)$ with weight $w_{ij}$ greater that the weight of the comparison vector with least posterior  probability $P(M_{i,j}|\gamma_{i,j})$ over the given threshold.
+
+The probability threshold can be thought as a bound for the false detection rate, where increasing the threshould decreases the FDR. Given the threshold $p_t$, the false detection rate can be estimated $FDR \leq (1-p_t)$, but in reality this is not often the case. That is why I've found it helpful to assign the probability threshold after looking at the $P( M_{i,j}|\gamma_{i,j})$ for each comparison vector above the cutoff.
+
+#The fastLink function
+
+Most of fastLinks user interface consists of the single wrapper function fastLink(). To get a feeling of how it works, we'll use it on the test data that we generated. Unfortunatly, fastLink currently only supports partial matching(having more than one agreement level) for numeric and character values, so we'll have to cast everything we want to compare numerically to numeric(including the dates).
+
+```{r}
+claims <- mutate(claims, deathdate = as.numeric(deathdate), birthyear = as.numeric(birthyear))
+dth_crt <- mutate(dth_crt, deathdate = as.numeric(deathdate), birthyear = as.numeric(birthyear))
+
+result <- fastLink(claims, dth_crt, 
+                   varnames = c("town", "birthyear", "sex", "deathdate"),
+                   numeric.match = c("birthyear", "deathdate"),
+                   stringdist.match = c("town"),
+                   partial.match = c("town", "deathdate"),
+                   cut.a.num = 1, cut.p.num = 14,
+                   cut.a = .94, cut.p = .88,
+                   threshold.match = .85)
+```
+This is the basic structure of a call to fastLink: we provide the two dataframes we want to match, the column names of the data we want to match on(the names must be the same in both dataframes), then how we want to compare each column. As previously stated, fastLink only supports non-exact comparisons with numeric and character columns, so all other columns will be compared exactly, with similarity level 2 if the same, and 0 if different. We can specify the numeric and character columns we want to compare non-exactly using numeric.match and stringdist.match, which will instead use cutoffs to determine their similarity levels.
+
+fastLink also only allows one or two cutoffs, so every field will either have two or three similarity levels: 0,2, or 0,1,2. By default every field is matched with only 2 similarity levels, but we can specify which columns we want to use 3 similarity levels on by name using partial.match. Note that the names in partial.match must be in either numeric.match or stringdist.match
+
+We can also apply our own cutoffs using cut.a.num, cut.p.num for numeric comparisons and cut.a, cut.p for string comparisons.
+
 
 
 
