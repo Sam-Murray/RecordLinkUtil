@@ -1,6 +1,7 @@
 ---
 title: "Entity Matching with fastLink"
-output: rmarkdown::html_vignette
+author: Sam Murray
+output: slidy_presentation
 vignette: >
   %\VignetteIndexEntry{Introduction}
   %\VignetteEngine{knitr::rmarkdown}
@@ -14,7 +15,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup, message = FALSE}
+```{r setup,echo = F, message = FALSE}
 library(fastLink)
 library(lubridate)
 library(RecordLinkUtil)
@@ -29,11 +30,10 @@ library(stringdist)
 ## The Entity Matching Problem:
 Given two datasets without shared unique identifers, how can we determine which records represent the same real world "entity"?
 
+Example: Matching health insurance claims and death certificates in maine over the last 5 years.
 
-###Example:
-Say you have death certificate data and health insurance claims data for Maine over the last 4 years, and you want to match the claims where the pateint dies in the hospital to the death certificates. You don't have access to unique identifiers like SSN, but there are shared feilds between the claims and certificate data(say city, sex, and age), and there are other feilds that should roughly line up(say death date and time of latest claim). 
-
-We can generate death certificate data that reflects this situation.
+## The Entity Matching Problem: 
+We can generate claims and death certificate data that reflects this situation:
 
 ```{r}
 
@@ -64,18 +64,40 @@ claims <-  mutate(dth_crt,
                     
 kable(claims[1:10,])
 look = cbind(data, claims)
-
+kable(look[1:10,])
 ```
 
-How can we extrapolate from these shared feilds to predict which records match? The naive approach would to just match on these feilds, but in this case this method yeilds very few matches:
+## The Entity Matching Problem: Naive Aproach
+Joining exactly on all fields yeilds very few matches:
 ```{r}
 perfect_matches = inner_join(dth_crt, claims, by = c("town", "birthyear", "sex", "deathdate"))
 print(paste0("Only ", nrow(perfect_matches), " perfect matches out of ", nrow(dth_crt)))
 ```
-Theres got to be a better way!
+## The Entity Matching Problem: fastLink
+The fastLink solution:
+```{r, echo = F,message=F}
+claims <- mutate(claims, deathdate = as.numeric(deathdate), birthyear = as.numeric(birthyear))
+dth_crt <- mutate(dth_crt, deathdate = as.numeric(deathdate), birthyear = as.numeric(birthyear))
+```
+
+```{r}
+result <- fastLink(claims, dth_crt, 
+                   varnames = c("town", "birthyear", "sex", "deathdate"),
+                   numeric.match = c("birthyear", "deathdate"),
+                   stringdist.match = c("town"),
+                   partial.match = c("town", "deathdate"),
+                   cut.a.num = 1, cut.p.num = 14,
+                   cut.a = .94, cut.p = .88,
+                   threshold.match = .85)
+
+print(paste0("Result returns an object of class: ", class(result)))
+print(paste0(" with fields: ", paste( names(result), collapse = ", ")))
+
+```
+------
 
 ##Fellegi-Sunter Model of Record Linkage:
-We can formalise this problem using the model developed by Ivan Fellegi and Alan Sunter in their 1969 paper "A Theory for Record Linkage". Their method can be broken down into four general steps:
+A formalization and general algorithm for record linkage.
 
 1. Calculating the __comparison vector__ for each pair of records
 2. Finding the probability of any given comparison vector given a match/nonmatch.
@@ -83,16 +105,15 @@ We can formalise this problem using the model developed by Ivan Fellegi and Alan
 
 ##1. Calculating Comparison vectors:
 
-A comparison vector is a way of representing the differences between two records in terms of the differences between their shared feilds. This translates in practice to a vector of numeric "distances" between each shared feature, where the distance between features is defined by a metric appropriate to that feature.
+-Comparison Vector: a formal respresentation of the differencebetween two records
+-Usually in terms of the numeric "distances" between each feild being matched on
 
-For an example, lets go back to the generated data. Here the shared feilds are town, sex, year of birth, and date of death. For yob and dod, we can use the number of years/days of diffrence between the two records as a metric. For sex, we can say that the difference is either 0 if the records agree or 1 if they disagree. For town, the choice of metric is less obvious. If we suspect that there are spelling errors in the towns feild(which there is), we can use string distance, a real number between 1 and 0 which measure how typographically similar the two strings are (ex: the distance between "string" and "rings" is `r stringdist("strings", "ring", method = "jw")`. However, another approriate metric might be how close the two towns are geographically.
-
-We'll run some examples from the generated data:
+##Comparison vectors Example 1:
 ```{r, include = FALSE}
 
 get_comp_vec <- function(a, b){
   out <- list()
-  town_dist <- stringdist(a$town, b$town, method = "jw")
+  town_dist <- 1 - stringdist(a$town, b$town, method = "jw")
   yob_dist <- abs(a$birthyear - b$birthyear)
   sex_dist<- as.numeric(!(a$sex == b$sex))
   deathdate_dist <- abs(as.numeric(a$deathdate)- as.numeric(b$deathdate))
@@ -100,6 +121,7 @@ get_comp_vec <- function(a, b){
 }
 
 ```
+
 
 ```{r,echo = FALSE}
 record_1 <- dth_crt[1,]
@@ -118,6 +140,19 @@ kable(get_comp_vec(record_1,record_2))
 print("The comparison vector between the first record of the claims and the second record of crt data is:")
 kable(get_comp_vec(record_1,record_3))
 ```
+##Comparison vectors Example 2:
+```{r,echo = FALSE}
+record_1 <- dth_crt[1,]
+print("The first record in the dth_crt data is :")
+kable(record_1)
+print("The second record in the claims data is :")
+record_3 <- claims[2,]
+kable(record_3)
+
+print("The comparison vector between the first record of the claims and the second record of crt data is:")
+kable(get_comp_vec(record_1,record_3))
+```
+
 
 This is a natural way of creating comparison vectors, but it has several subtle probabilistic issues.
 If we eventually want find the probability of a comparison vector occuring between a match/nonmatch (step 2 of fellegi-sunter), how can we allow a continous variable like string distance from a potentially continous probability space without making the probability of any one given comparison vector zero?
@@ -134,7 +169,7 @@ cv2 <- get_comp_vec(record_1,record_3)
 cvs <- rbind(cv1, cv2)
 
 cvs <-  mutate(cvs,
-               town_dist = ifelse(town_dist <= .02, 2, ifelse(town_dist <= .2 , 1, 0)),
+               town_dist = ifelse(town_dist >= .98, 2, ifelse(town_dist >= .8 , 1, 0)),
                yob_dist = ifelse(yob_dist <= 2, 2, ifelse(yob_dist <= 10 , 1, 0)),
                deathdate_dist = ifelse(deathdate_dist <= 2, 2, ifelse(deathdate_dist <= 10,1, 0)),
                sex_dist = ifelse(sex_dist == 0, 2, 0))
@@ -277,7 +312,7 @@ r3 <- tibble(town = "RTLAND", birthyear = 1990, deathdate = 16514, sex = "F")
 print("Record 3:")
 kable(r3)
 apply_cutoffs <- function(x, cut.a, cut.p, cut.num.a, cut.num.p){
-  res <- tibble(town_dist = ifelse(x$town_dist <= (1-cut.a), 2, ifelse(x$town_dist <= (1-cut.p),1,0)),
+  res <- tibble(town_dist = ifelse(x$town_dist >= (cut.a), 2, ifelse(x$town_dist >= (cut.p),1,0)),
                 yob_dist = ifelse(x$yob_dist <= (cut.num.a), 2, 0),
                 deathdate_dist = ifelse(x$deathdate_dist <= cut.num.a, 2, ifelse(x$deathdate_dist <= cut.num.p,1,0)),
                 sex_dist = ifelse( x$sex_dist == 0,2, 0)
@@ -298,18 +333,23 @@ kable(comp_vec2)
 
 This call to fastLink returns a bunch of information bundled into a FastLink object:
 
-Firstly, and most importantly, it returns the detected matches as a 2 column matrix of indices into the first and second data frames.
+Firstly, and most importantly, it returns the detected matches as a 2 column matrix of indices into the first and second data frames. Because we have the real indices of each match, we can find the sensitivity and specificity of the matching:
+
 ```{r}
 matches <- result$matches
 kable(matches[1:10,])
 print(paste0("Number of detected matches: ",nrow(matches)))
+c_table <- getConfusion(claims, dth_crt, matches, "id")
+kable(c_table)
+c_table_info <- getConfusionInfo(c_table)
+kable(c_table_info)
 ```
 It also returns "posteriors" and "patterns", which is the corrisponding probability of a match and comparison vector for every pair in matches. 
 ```{r}
 posterior <- result$posterior
 patterns <- result$patterns
 kable(posterior[1:10])
-kable(patterns[1:10])
+kable(patterns[1:10,])
 matched_pairs <- cbind(claims[matches[,1],],dth_crt[matches[,2],],posterior)
 matched_pairs <- bindMatches_p(claims[-1], dth_crt[-1], posterior, matches, idA = "claims.", idB = "dth_crt.")
 kable(matched_pairs[1:10,])
@@ -323,11 +363,35 @@ kable(unique_patterns)
 ```
 
 
+```{r}
+ new_cutoff <- unique_patterns[4,6]
 
+new_result <- fastLink(claims, dth_crt, 
+                   varnames = c("town", "birthyear", "sex", "deathdate"),
+                   numeric.match = c("birthyear", "deathdate"),
+                   stringdist.match = c("town"),
+                   partial.match = c("town", "deathdate"),
+                   cut.a.num = 1, cut.p.num = 14,
+                   cut.a = .94, cut.p = .88,
+                   threshold.match = new_cutoff)
 
+print(paste0("Number of detected matches: ",nrow(new_result$matches)))
+new_c_table <- getConfusion(claims, dth_crt, new_result$matches, "id")
+new_c_table_info <- getConfusionInfo(new_c_table)
+```
 
+##Optional arguments to fastLink:
 
+###dedupe.matches
+Enforces that every record in dfA must match with at most one record in dfB. Does this by choosing the best match for every document in A and B, then breaks ties arbitrarily. Is true by default, when false returns every match over matching threshold.
 
+###return.all
+Sets the threshold for a match to 0. If dedupe.matches is also true, this will return the best matches for every record in the smaller dataframe. If dedupe matches is not true, it will return all pairs of records in dfA and dfB.
+
+###cond.indep
+The fellegi-sunter model for record linkage assumes conditional independence of feilds in comparison vectors, but this is sometimes not the case. If cond.indep is false, then we use a modified version of the fellegi-sunter model.
+
+##Techniques for reducing computation time
 
 
 
